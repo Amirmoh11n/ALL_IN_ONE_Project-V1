@@ -1,0 +1,3 @@
+# docker-compose.yml (placeholder)
+# Purpose: orchestrate backend (+ frontend, if containerized) services together.
+# NOTE: Structural placeholder only. Content pending discussion/approval.

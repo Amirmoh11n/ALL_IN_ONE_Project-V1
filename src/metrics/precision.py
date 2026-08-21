@@ -1,5 +1,5 @@
 """
-Defines the 4 tumor class labels and any label <-> index mapping utilities.
+Precision metric implementation (renamed from Precision.py).
 
 NOTE: Structural placeholder only. Implementation pending discussion/approval.
 """

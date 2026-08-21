@@ -1,0 +1,26 @@
+# Central configuration file for the Brain Tumor Classification project.
+# All experiment-relevant numbers/settings should live here (never hardcoded in source).
+#
+# NOTE: This is a structural skeleton only. Sections are placeholders; concrete
+# values (paths, hyperparameters, augmentation settings, etc.) are pending discussion.
+
+data:
+  # raw_dir, train/val split ratio, split strategy, etc. (TBD)
+
+model:
+  # architecture name, input size, num_classes, etc. (TBD)
+
+training:
+  # optimizer, lr, scheduler, early_stopping, class_weights, etc. (TBD)
+
+evaluation:
+  # metrics list / thresholds (TBD)
+
+export:
+  # target formats: web, mobile, gpu, onnx (TBD)
+
+tracking:
+  # mlflow settings (TBD)
+
+logging:
+  # level: DEBUG | INFO | WARNING (TBD)
