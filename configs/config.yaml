@@ -51,7 +51,18 @@ model:
   freeze_backbone: false    # false = full fine-tune (default); true = feature-extraction only
 
 training:
-  # optimizer, lr, scheduler, early_stopping, class_weights, etc. (TBD)
+  epochs: 30
+  learning_rate: 0.0001
+  optimizer: "adam"            # only Adam implemented for now; kept explicit for future flexibility
+  use_class_weights: true      # computed at runtime from the actual train split (no manual EDA needed)
+  device: "cuda"                # falls back to cpu automatically if unavailable
+  early_stopping:
+    patience: 5
+    monitor: "val_loss"
+  lr_scheduler:
+    type: "reduce_on_plateau"
+    factor: 0.5
+    patience: 2
 
 evaluation:
   # metrics list / thresholds (TBD)
@@ -60,7 +71,12 @@ export:
   # target formats: web, mobile, gpu, onnx (TBD)
 
 tracking:
-  # mlflow settings (TBD)
+  mlflow:
+    enabled: true
+    # NOTE: plain filesystem tracking (e.g. "artifacts/mlruns") is deprecated in
+    # MLflow 3.x; using a local SQLite backend instead, per MLflow's current guidance.
+    tracking_uri: "sqlite:///artifacts/mlruns/mlflow.db"
+    experiment_name: "brain_tumor_classification"
 
 logging:
-  # level: DEBUG | INFO | WARNING (TBD)
+  level: "INFO"   # DEBUG | INFO | WARNING | ERROR

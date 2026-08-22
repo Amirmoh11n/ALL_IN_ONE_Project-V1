@@ -1,7 +1,16 @@
 # src/engine
 
-**New folder** (not present in the originally proposed tree; added because no component owned the actual
-training loop). Renamed from `training` to `engine`.
+Training loop orchestration (renamed from `training` to `engine`).
 
-- `trainer.py` — orchestrates the training loop: CrossEntropyLoss, optimizer, early stopping, LR scheduling,
-  optional class weighting, and MLflow experiment tracking.
+- `trainer.py`:
+  - `compute_class_weights(labels, num_classes)` — pure function, inverse-frequency
+    class weights computed at **runtime** from the actual training split (no manual
+    EDA step needed; toggled via `training.use_class_weights` in config).
+  - `EarlyStopping` — stops training when `val_loss` hasn't improved for
+    `training.early_stopping.patience` epochs.
+  - `Trainer` — orchestrates the full loop: `CrossEntropyLoss` (optionally
+    class-weighted), `Adam` optimizer, `ReduceLROnPlateau` LR scheduling, early
+    stopping, best-checkpoint saving to `artifacts/checkpoints/best_model.pt`,
+    and optional MLflow experiment tracking (`tracking.mlflow.*` in config).
+
+All hyperparameters live in `configs/config.yaml` (`training`, `tracking.mlflow`).

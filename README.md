@@ -22,8 +22,12 @@ Every folder has its own short `README.md` describing its purpose in more detail
   `EfficientNetB3Classifier` wraps torchvision's ImageNet-pretrained EfficientNet-B3
   with a replaced 4-class output layer; built-in dropout preserved; `freeze_backbone`
   is config-driven (default: full fine-tune).
-- ⏳ Training loop, evaluation, export, inference, and the web app are not yet
-  implemented — pending step-by-step discussion and approval.
+- ✅ **Step 3 — Training engine**: implemented and tested (`src/engine/trainer.py`).
+  `Trainer` runs the full loop (CrossEntropyLoss, optionally class-weighted via
+  runtime-computed weights, Adam, `ReduceLROnPlateau`, early stopping, best-checkpoint
+  saving, optional MLflow tracking).
+- ⏳ Evaluation, export, inference, and the web app are not yet implemented —
+  pending step-by-step discussion and approval.
 
 Run the data-pipeline tests:
 ```bash

@@ -10,7 +10,9 @@ dependencies = [
     "pillow>=10.0",
     "pyyaml>=6.0",
     "kagglehub>=0.3",
-    # NOTE: dependencies for later steps (training, metrics, export, MLflow, FastAPI,
+    # --- Step 3: training engine ---
+    "mlflow>=3.0",
+    # NOTE: dependencies for later steps (evaluation metrics, export, FastAPI,
     # etc.) will be added incrementally, only when their step is implemented.
 ]
 

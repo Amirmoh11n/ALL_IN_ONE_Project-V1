@@ -15,6 +15,12 @@ network access.
 - `test_dataset.py` — `BrainTumorDataset` loading, transforms, shapes.
 - `test_pipeline.py` — end-to-end `DataPipeline` test (download-skip → split →
   dataset → dataloader) against a synthetic dataset.
+- `test_efficientnet.py` — `EfficientNetB3Classifier` output shape, preserved
+  dropout, full-fine-tune vs freeze_backbone behavior (uses `pretrained=False`
+  to avoid a network dependency on ImageNet weights).
+- `test_trainer.py` — `EarlyStopping`, `compute_class_weights`, and an end-to-end
+  `Trainer` run (tiny dummy CNN + synthetic data) covering checkpoint saving,
+  class-weighted loss, and MLflow metric logging.
 
 Run with:
 ```bash
