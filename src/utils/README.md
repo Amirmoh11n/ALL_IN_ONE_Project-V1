@@ -2,4 +2,5 @@
 
 Shared helper utilities used across the project.
 
-- `config_loader.py` — loads and validates `configs/config.yaml` (renamed from `confige_loader.py`).
+- `config_loader.py` — `ConfigLoader`: loads `configs/config.yaml` and exposes a
+  dotted-path getter, e.g. `config.get("data.val_split", 0.15)`.

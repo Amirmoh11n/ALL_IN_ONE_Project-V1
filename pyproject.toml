@@ -1,3 +1,24 @@
-# pyproject.toml (placeholder)
-# Purpose: project metadata + dependency/environment management (uv).
-# NOTE: Structural placeholder only. Content pending discussion/approval.
+[project]
+name = "brain-tumor-classification"
+version = "0.1.0"
+description = "End-to-end brain tumor MRI classification system (EfficientNet-B3 + FastAPI/React web app)."
+requires-python = ">=3.10"
+dependencies = [
+    # --- Step 1: data pipeline ---
+    "torch>=2.2",
+    "torchvision>=0.17",
+    "pillow>=10.0",
+    "pyyaml>=6.0",
+    "kagglehub>=0.3",
+    # NOTE: dependencies for later steps (training, metrics, export, MLflow, FastAPI,
+    # etc.) will be added incrementally, only when their step is implemented.
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+]
+
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
