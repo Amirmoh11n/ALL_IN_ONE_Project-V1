@@ -18,8 +18,12 @@ Every folder has its own short `README.md` describing its purpose in more detail
   dataset via `kagglehub` if missing, performs a stratified train/val split (15% val),
   builds `BrainTumorDataset`s with ImageNet normalization + on-the-fly augmentation
   (train only), and exposes ready-to-use `DataLoader`s through `DataPipeline`.
-- ⏳ Model, training loop, evaluation, export, inference, and the web app are not
-  yet implemented — pending step-by-step discussion and approval.
+- ✅ **Step 2 — Model**: implemented and tested (`src/models/efficientnet.py`).
+  `EfficientNetB3Classifier` wraps torchvision's ImageNet-pretrained EfficientNet-B3
+  with a replaced 4-class output layer; built-in dropout preserved; `freeze_backbone`
+  is config-driven (default: full fine-tune).
+- ⏳ Training loop, evaluation, export, inference, and the web app are not yet
+  implemented — pending step-by-step discussion and approval.
 
 Run the data-pipeline tests:
 ```bash

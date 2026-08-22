@@ -45,7 +45,10 @@ data:
     shuffle_train: true
 
 model:
-  # architecture name, input size, num_classes, etc. (TBD)
+  architecture: "efficientnet_b3"
+  pretrained: true          # load ImageNet-pretrained weights (torchvision)
+  num_classes: 4            # must match len(data.class_names)
+  freeze_backbone: false    # false = full fine-tune (default); true = feature-extraction only
 
 training:
   # optimizer, lr, scheduler, early_stopping, class_weights, etc. (TBD)
