@@ -26,8 +26,15 @@ Every folder has its own short `README.md` describing its purpose in more detail
   `Trainer` runs the full loop (CrossEntropyLoss, optionally class-weighted via
   runtime-computed weights, Adam, `ReduceLROnPlateau`, early stopping, best-checkpoint
   saving, optional MLflow tracking).
-- ⏳ Evaluation, export, inference, and the web app are not yet implemented —
-  pending step-by-step discussion and approval.
+- ✅ **Step 4 — Metrics**: implemented and tested (`src/metrics/`). All 6 metrics
+  (Confusion Matrix, Recall, F1-macro, Precision, ROC-AUC macro/OvR, Accuracy) as
+  thin scikit-learn-backed classes with a consistent `.compute()` interface.
+- ✅ **Step 5 — Evaluation**: implemented and tested (`src/evaluate/evaluate.py`).
+  `ModelEvaluator` runs inference over a DataLoader (e.g. the untouched Testing
+  set) and computes the full metric suite via `EvaluationResult`. Checkpoint
+  loading (`src/utils/checkpoint.py`) is shared with the upcoming inference step.
+- ⏳ Export, inference (endpoint wiring), and the web app are not yet
+  implemented — pending step-by-step discussion and approval.
 
 Run the data-pipeline tests:
 ```bash

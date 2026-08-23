@@ -12,8 +12,11 @@ dependencies = [
     "kagglehub>=0.3",
     # --- Step 3: training engine ---
     "mlflow>=3.0",
-    # NOTE: dependencies for later steps (evaluation metrics, export, FastAPI,
-    # etc.) will be added incrementally, only when their step is implemented.
+    # --- Step 4: evaluation metrics ---
+    "scikit-learn>=1.4",
+    "numpy>=1.26",
+    # NOTE: dependencies for later steps (export, FastAPI, etc.) will be added
+    # incrementally, only when their step is implemented.
 ]
 
 [project.optional-dependencies]

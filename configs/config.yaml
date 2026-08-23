@@ -65,7 +65,7 @@ training:
     patience: 2
 
 evaluation:
-  # metrics list / thresholds (TBD)
+  num_classes: 4   # kept in sync with model.num_classes / data.class_names
 
 export:
   # target formats: web, mobile, gpu, onnx (TBD)

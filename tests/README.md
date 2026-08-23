@@ -21,6 +21,16 @@ network access.
 - `test_trainer.py` — `EarlyStopping`, `compute_class_weights`, and an end-to-end
   `Trainer` run (tiny dummy CNN + synthetic data) covering checkpoint saving,
   class-weighted loss, and MLflow metric logging.
+- `test_metrics.py` — all 6 metrics against a hand-computed 4-class scenario
+  (confusion matrix, recall, precision, F1 all checked against manually derived
+  expected values, not just re-deriving sklearn's own answer), plus edge cases
+  (perfect predictions, a class with zero predictions).
+- `test_checkpoint.py` — `load_model_checkpoint` restores exact weights and
+  sets the model to eval mode.
+- `test_evaluate.py` — `ModelEvaluator` orchestration: correct confusion-matrix
+  shape, macro metrics in valid range, per-class arrays sized correctly,
+  `to_dict()` is JSON-serializable (exact metric *values* are covered by
+  `test_metrics.py`, not repeated here).
 
 Run with:
 ```bash
