@@ -2,7 +2,8 @@
 Training loop orchestration for EfficientNet-B3: CrossEntropyLoss (optionally
 class-weighted, computed at runtime from the actual training split),
 Adam optimizer, ReduceLROnPlateau LR scheduling, early stopping on validation
-loss, best-checkpoint saving, and optional MLflow experiment tracking.
+loss, best-checkpoint saving, per-epoch validation metrics (via src/metrics/),
+and optional MLflow experiment tracking.
 
 All hyperparameters are read from configs/config.yaml (never hardcoded).
 """
@@ -11,14 +12,20 @@ import logging
 from collections import Counter
 from contextlib import nullcontext
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as TF
 from torch.optim import Adam
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.utils.data import DataLoader
 
+from src.metrics.accuracy import AccuracyMetric
+from src.metrics.f1_score import F1ScoreMetric
+from src.metrics.precision import PrecisionMetric
+from src.metrics.recall import RecallMetric
+from src.metrics.roc_auc import ROCAUCMetric
 from src.utils.config_loader import ConfigLoader
 
 logger = logging.getLogger(__name__)
@@ -88,6 +95,7 @@ class Trainer:
         train_loader: DataLoader,
         val_loader: DataLoader,
         config: ConfigLoader,
+        num_classes: Optional[int] = None,
         checkpoint_dir: Optional[Path] = None,
     ) -> None:
         """
@@ -96,6 +104,8 @@ class Trainer:
             train_loader: Training DataLoader (from DataPipeline).
             val_loader: Validation DataLoader (from DataPipeline).
             config: Loaded ConfigLoader over configs/config.yaml.
+            num_classes: Number of classes, used to compute validation metrics
+                each epoch. Defaults to config's model.num_classes (falls back to 4).
             checkpoint_dir: Where to save the best checkpoint. Defaults to
                 "artifacts/checkpoints" (the project's fixed artifacts location).
         """
@@ -103,6 +113,7 @@ class Trainer:
         self.train_loader = train_loader
         self.val_loader = val_loader
         self.config = config
+        self.num_classes = num_classes or config.get("model.num_classes", 4)
 
         requested_device = config.get("training.device", "cuda")
         self.device = torch.device(requested_device if torch.cuda.is_available() else "cpu")
@@ -149,28 +160,36 @@ class Trainer:
             num_epochs: Max epochs to run. Defaults to config's training.epochs.
 
         Returns:
-            History dict with "train_loss", "val_loss", "val_accuracy" per epoch.
+            History dict with one list per epoch for: "train_loss", "val_loss",
+            "val_accuracy", "val_recall_macro", "val_precision_macro",
+            "val_f1_macro", "val_roc_auc_macro".
         """
         num_epochs = num_epochs or self.config.get("training.epochs", 30)
-        history: Dict[str, List[float]] = {"train_loss": [], "val_loss": [], "val_accuracy": []}
+        history: Dict[str, List[float]] = {"train_loss": [], "val_loss": []}
 
         run_context = self._mlflow_run_context()
         with run_context:
             self._log_mlflow_params(num_epochs)
             for epoch in range(1, num_epochs + 1):
                 train_loss = self._train_one_epoch()
-                val_loss, val_accuracy = self._validate_one_epoch()
+                val_loss, y_true, y_pred, y_score = self._validate_one_epoch()
+                val_metrics = self._compute_validation_metrics(y_true, y_pred, y_score)
                 self.scheduler.step(val_loss)
 
                 history["train_loss"].append(train_loss)
                 history["val_loss"].append(val_loss)
-                history["val_accuracy"].append(val_accuracy)
+                for key, value in val_metrics.items():
+                    history.setdefault(key, []).append(value)
 
                 logger.info(
-                    "Epoch %d/%d - train_loss=%.4f val_loss=%.4f val_acc=%.4f",
-                    epoch, num_epochs, train_loss, val_loss, val_accuracy,
+                    "Epoch %d/%d - train_loss=%.4f val_loss=%.4f val_acc=%.4f "
+                    "val_recall=%.4f val_precision=%.4f val_f1=%.4f val_roc_auc=%.4f",
+                    epoch, num_epochs, train_loss, val_loss,
+                    val_metrics["val_accuracy"], val_metrics["val_recall_macro"],
+                    val_metrics["val_precision_macro"], val_metrics["val_f1_macro"],
+                    val_metrics["val_roc_auc_macro"],
                 )
-                self._log_mlflow_metrics(epoch, train_loss, val_loss, val_accuracy)
+                self._log_mlflow_metrics(epoch, train_loss, val_loss, val_metrics)
 
                 if val_loss < self.best_val_loss:
                     self.best_val_loss = val_loss
@@ -197,21 +216,46 @@ class Trainer:
             running_loss += loss.item() * images.size(0)
         return running_loss / len(self.train_loader.dataset)
 
-    def _validate_one_epoch(self) -> "tuple[float, float]":
-        """Run one validation epoch. Returns (mean val loss, val accuracy)."""
+    def _validate_one_epoch(self) -> Tuple[float, List[int], List[int], List[List[float]]]:
+        """Run one validation epoch in a single pass.
+
+        Returns:
+            (mean val loss, true labels, predicted labels, predicted probabilities)
+            -- the latter three are used to compute the full metric suite
+            without a second forward pass over the validation set.
+        """
         self.model.eval()
         running_loss = 0.0
-        correct = 0
+        y_true: List[int] = []
+        y_pred: List[int] = []
+        y_score: List[List[float]] = []
+
         with torch.no_grad():
             for images, labels in self.val_loader:
                 images, labels = images.to(self.device), labels.to(self.device)
                 outputs = self.model(images)
                 loss = self.criterion(outputs, labels)
                 running_loss += loss.item() * images.size(0)
-                correct += (outputs.argmax(dim=1) == labels).sum().item()
+
+                probabilities = TF.softmax(outputs, dim=1)
+                y_true.extend(labels.cpu().tolist())
+                y_pred.extend(probabilities.argmax(dim=1).cpu().tolist())
+                y_score.extend(probabilities.cpu().tolist())
+
         val_loss = running_loss / len(self.val_loader.dataset)
-        val_accuracy = correct / len(self.val_loader.dataset)
-        return val_loss, val_accuracy
+        return val_loss, y_true, y_pred, y_score
+
+    def _compute_validation_metrics(
+        self, y_true: List[int], y_pred: List[int], y_score: List[List[float]],
+    ) -> Dict[str, float]:
+        """Compute the macro-averaged metric suite for one epoch's validation pass."""
+        return {
+            "val_accuracy": AccuracyMetric.compute(y_true, y_pred),
+            "val_recall_macro": RecallMetric.compute(y_true, y_pred, average="macro"),
+            "val_precision_macro": PrecisionMetric.compute(y_true, y_pred, average="macro"),
+            "val_f1_macro": F1ScoreMetric.compute(y_true, y_pred, average="macro"),
+            "val_roc_auc_macro": ROCAUCMetric.compute(y_true, y_score, num_classes=self.num_classes),
+        }
 
     def _save_checkpoint(self, epoch: int, val_loss: float) -> Path:
         """Save the current model state as the new best checkpoint."""
@@ -246,12 +290,12 @@ class Trainer:
             "device": str(self.device),
         })
 
-    def _log_mlflow_metrics(self, epoch: int, train_loss: float, val_loss: float, val_accuracy: float) -> None:
+    def _log_mlflow_metrics(
+        self, epoch: int, train_loss: float, val_loss: float, val_metrics: Dict[str, float],
+    ) -> None:
         if not self.mlflow_enabled:
             return
         import mlflow
 
-        mlflow.log_metrics(
-            {"train_loss": train_loss, "val_loss": val_loss, "val_accuracy": val_accuracy},
-            step=epoch,
-        )
+        metrics_to_log = {"train_loss": train_loss, "val_loss": val_loss, **val_metrics}
+        mlflow.log_metrics(metrics_to_log, step=epoch)

@@ -1,51 +1,43 @@
 # tests
 
-Unit/integration tests, one focused module per source module, using synthetic
-(tiny, generated) images so tests run fast and don't need the real dataset or
-network access.
+Unit/integration tests, organized into one subfolder per `src/` package (mirrors
+the source tree), using synthetic (tiny, generated) images so tests run fast and
+don't need the real dataset or network access.
 
-- `conftest.py` — shared fixtures: builds fake `Training/<class>/*.jpg` and
-  `Testing/<class>/*.jpg` folders with a few tiny generated images per class.
-- `test_classes.py` — `TumorClasses` name/index mapping.
-- `test_config_loader.py` — `ConfigLoader` dotted-path access.
-- `test_downloader.py` — `DatasetDownloader` presence check + skip-download path
-  (the actual kagglehub network download is out of scope for unit tests).
-- `test_splitter.py` — `DatasetSplitter` ratio, stratification, disjointness,
-  shuffling, and reproducibility.
-- `test_dataset.py` — `BrainTumorDataset` loading, transforms, shapes.
-- `test_pipeline.py` — end-to-end `DataPipeline` test (download-skip → split →
-  dataset → dataloader) against a synthetic dataset.
-- `test_efficientnet.py` — `EfficientNetB3Classifier` output shape, preserved
-  dropout, full-fine-tune vs freeze_backbone behavior (uses `pretrained=False`
-  to avoid a network dependency on ImageNet weights).
-- `test_trainer.py` — `EarlyStopping`, `compute_class_weights`, and an end-to-end
-  `Trainer` run (tiny dummy CNN + synthetic data) covering checkpoint saving,
-  class-weighted loss, and MLflow metric logging.
-- `test_metrics.py` — all 6 metrics against a hand-computed 4-class scenario
-  (confusion matrix, recall, precision, F1 all checked against manually derived
-  expected values, not just re-deriving sklearn's own answer), plus edge cases
-  (perfect predictions, a class with zero predictions).
-- `test_checkpoint.py` — `load_model_checkpoint` restores exact weights and
-  sets the model to eval mode.
-- `test_evaluate.py` — `ModelEvaluator` orchestration: correct confusion-matrix
-  shape, macro metrics in valid range, per-class arrays sized correctly,
-  `to_dict()` is JSON-serializable (exact metric *values* are covered by
-  `test_metrics.py`, not repeated here).
-- `test_export.py` — `ModelExporter`: each of the 4 formats produces a file
-  that reloads correctly and numerically matches the original PyTorch output
-  (ONNX additionally validated with `onnx.checker` + `onnxruntime`).
-- `test_inference.py` — `InferencePipeline`: predicts from both a file path
-  and a PIL Image, probabilities cover all 4 classes and sum to 1, confidence
-  matches the argmax probability, JSON-serializable output, grayscale input
-  handled via RGB conversion.
-- `test_export.py` — `ModelExporter`: web/mobile/onnx file creation, exported
-  TorchScript output matches the original model's output, ONNX graph validity
-  + dynamic batch dimension, graceful fallback when XNNPACK is unavailable,
-  clear error when GPU export is attempted without CUDA, plus one integration
-  test against the real EfficientNetB3Classifier (not just a toy CNN) to catch
-  architecture-specific export issues (squeeze-excite, SiLU).
+```
+tests/
+├── conftest.py            # shared fixtures (synthetic Training/Testing folders),
+│                           # applies to every subfolder below automatically
+├── data/                   -> mirrors src/data/
+│   ├── test_classes.py
+│   ├── test_downloader.py
+│   ├── test_splitter.py
+│   ├── test_dataset.py
+│   └── test_pipeline.py    # end-to-end DataPipeline test
+├── models/                 -> mirrors src/models/
+│   └── test_efficientnet.py
+├── engine/                 -> mirrors src/engine/
+│   └── test_trainer.py
+├── metrics/                -> mirrors src/metrics/
+│   └── test_metrics.py     # all 6 metrics, hand-computed expected values
+├── evaluate/                -> mirrors src/evaluate/
+│   └── test_evaluate.py
+├── export/                 -> mirrors src/export/
+│   └── test_export.py
+├── inference/               -> mirrors src/inference/
+│   └── test_inference.py
+└── utils/                  -> mirrors src/utils/
+    ├── test_config_loader.py
+    └── test_checkpoint.py
+```
 
-Run with:
+Run everything:
 ```bash
 pytest tests/ -v
+```
+
+Run just one package's tests:
+```bash
+pytest tests/data/ -v
+pytest tests/engine/ -v
 ```

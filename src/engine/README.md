@@ -12,5 +12,11 @@ Training loop orchestration (renamed from `training` to `engine`).
     class-weighted), `Adam` optimizer, `ReduceLROnPlateau` LR scheduling, early
     stopping, best-checkpoint saving to `artifacts/checkpoints/best_model.pt`,
     and optional MLflow experiment tracking (`tracking.mlflow.*` in config).
+  - **Per-epoch validation metrics**: each epoch, validation predictions are
+    run through the same classes as `src/evaluate/evaluate.py`
+    (`AccuracyMetric`, `RecallMetric`, `PrecisionMetric`, `F1ScoreMetric`,
+    `ROCAUCMetric`, all macro-averaged) in a single forward pass, printed to
+    the log line, returned in `fit()`'s history dict, and logged to MLflow —
+    not just loss/accuracy.
 
 All hyperparameters live in `configs/config.yaml` (`training`, `tracking.mlflow`).
