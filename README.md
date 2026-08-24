@@ -33,8 +33,16 @@ Every folder has its own short `README.md` describing its purpose in more detail
   `ModelEvaluator` runs inference over a DataLoader (e.g. the untouched Testing
   set) and computes the full metric suite via `EvaluationResult`. Checkpoint
   loading (`src/utils/checkpoint.py`) is shared with the upcoming inference step.
-- ⏳ Export, inference (endpoint wiring), and the web app are not yet
-  implemented — pending step-by-step discussion and approval.
+- ✅ **Step 6 — Export & Inference**: implemented and tested
+  (`src/export/export.py`, `src/inference/inference.py`). `ModelExporter`
+  produces Web (TorchScript), GPU (frozen TorchScript), Mobile (PyTorch Lite
+  Interpreter), and ONNX formats, each validated by reloading and comparing
+  output against the original model. `InferencePipeline` loads a checkpoint
+  and classifies a single uploaded image, returning class + confidence +
+  full probability distribution. See `src/export/README.md` for a few
+  deprecation/compatibility notes found while implementing.
+- ⏳ The web app (FastAPI backend + React frontend) and Docker/AWS deployment
+  are not yet implemented — pending step-by-step discussion and approval.
 
 Run the data-pipeline tests:
 ```bash

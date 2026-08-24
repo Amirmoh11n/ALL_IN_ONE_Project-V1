@@ -68,7 +68,13 @@ evaluation:
   num_classes: 4   # kept in sync with model.num_classes / data.class_names
 
 export:
-  # target formats: web, mobile, gpu, onnx (TBD)
+  output_dir: "artifacts/exports"
+  input_size: 300   # must match data.image_size (fixed export input resolution)
+  onnx:
+    opset_version: 18   # opset 17 triggers an internal ONNX version-conversion bug; 18 is clean
+  # NOTE: GPU export uses frozen TorchScript (torch.jit.freeze), not FP16 --
+  # torch.jit.optimize_for_inference was evaluated but its output fails to
+  # reload in this environment's torch build (see src/export/README.md).
 
 tracking:
   mlflow:

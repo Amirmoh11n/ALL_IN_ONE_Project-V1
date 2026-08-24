@@ -31,6 +31,19 @@ network access.
   shape, macro metrics in valid range, per-class arrays sized correctly,
   `to_dict()` is JSON-serializable (exact metric *values* are covered by
   `test_metrics.py`, not repeated here).
+- `test_export.py` — `ModelExporter`: each of the 4 formats produces a file
+  that reloads correctly and numerically matches the original PyTorch output
+  (ONNX additionally validated with `onnx.checker` + `onnxruntime`).
+- `test_inference.py` — `InferencePipeline`: predicts from both a file path
+  and a PIL Image, probabilities cover all 4 classes and sum to 1, confidence
+  matches the argmax probability, JSON-serializable output, grayscale input
+  handled via RGB conversion.
+- `test_export.py` — `ModelExporter`: web/mobile/onnx file creation, exported
+  TorchScript output matches the original model's output, ONNX graph validity
+  + dynamic batch dimension, graceful fallback when XNNPACK is unavailable,
+  clear error when GPU export is attempted without CUDA, plus one integration
+  test against the real EfficientNetB3Classifier (not just a toy CNN) to catch
+  architecture-specific export issues (squeeze-excite, SiLU).
 
 Run with:
 ```bash
