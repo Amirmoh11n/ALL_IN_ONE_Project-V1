@@ -1,63 +1,49 @@
-# Central configuration file for the Brain Tumor Classification project.
-# All experiment-relevant numbers/settings should live here (never hardcoded in source).
-#
-# NOTE: This is a structural skeleton only. Sections are placeholders; concrete
-# values (paths, hyperparameters, augmentation settings, etc.) are pending discussion.
+# Single source of truth for the complete training/evaluation/export pipeline.
 
 data:
-  # Local location of the raw dataset (relative to project root).
   raw_dir: "data/raw"
-  train_dir_name: "Training"   # data/raw/Training
-  test_dir_name: "Testing"     # data/raw/Testing (untouched, final evaluation only)
-
-  # Source used to auto-download the dataset if raw_dir is empty/missing.
+  train_dir_name: "Training"
+  test_dir_name: "Testing"
   kaggle:
     dataset_slug: "masoudnickparvar/brain-tumor-mri-dataset"
-    # Auth is NOT stored here. See data/README.md for how to configure
-    # ~/.kaggle/kaggle.json or the KAGGLE_USERNAME / KAGGLE_KEY env vars.
-
-  # 4 tumor classes, in the exact order used for label indices everywhere in the project.
   class_names: ["glioma", "meningioma", "notumor", "pituitary"]
-
-  # Training folder is split into train/val; Testing folder is left untouched.
   val_split: 0.15
-  split_strategy: "stratified_image_level"   # patient-level not feasible: no patient IDs in this dataset
-  seed: 42                                    # controls shuffling + split reproducibility
-
-  image_size: 300   # EfficientNet-B3 standard input resolution
-
-  # Normalization: ImageNet stats (we use an ImageNet-pretrained EfficientNet-B3 backbone).
+  split_strategy: "stratified_image_level"
+  seed: 42
+  image_size: 300
   normalization:
     mean: [0.485, 0.456, 0.406]
     std: [0.229, 0.224, 0.225]
-
-  # Light augmentation applied to the TRAIN split only (val/test use eval-only transforms).
   augmentation:
     random_horizontal_flip_p: 0.5
     random_rotation_degrees: 15
     color_jitter:
       brightness: 0.1
       contrast: 0.1
-
   dataloader:
     batch_size: 32
     num_workers: 4
     shuffle_train: true
+    pin_memory: true
+    persistent_workers: true
 
 model:
   architecture: "efficientnet_b3"
-  pretrained: true          # load ImageNet-pretrained weights (torchvision)
-  num_classes: 4            # must match len(data.class_names)
-  freeze_backbone: false    # false = full fine-tune (default); true = feature-extraction only
+  pretrained: true
+  num_classes: 4
+  freeze_backbone: false
 
 training:
   epochs: 30
   learning_rate: 0.0001
-  optimizer: "adam"            # only Adam implemented for now; kept explicit for future flexibility
-  use_class_weights: true      # computed at runtime from the actual train split (no manual EDA needed)
-  device: "cuda"                # falls back to cpu automatically if unavailable
+  weight_decay: 0.00001
+  optimizer: "adam"
+  use_class_weights: true
+  device: "auto"       # auto | cuda | cpu
+  amp: true            # CUDA mixed precision; automatically disabled on CPU
   early_stopping:
     patience: 5
+    min_delta: 0.0
     monitor: "val_loss"
   lr_scheduler:
     type: "reduce_on_plateau"
@@ -65,24 +51,26 @@ training:
     patience: 2
 
 evaluation:
-  num_classes: 4   # kept in sync with model.num_classes / data.class_names
+  num_classes: 4
 
 export:
   output_dir: "artifacts/exports"
-  input_size: 300   # must match data.image_size (fixed export input resolution)
+  base_name: "brain_tumor_efficientnet_b3"
+  input_size: 300
   onnx:
-    opset_version: 18   # opset 17 triggers an internal ONNX version-conversion bug; 18 is clean
-  # NOTE: GPU export uses frozen TorchScript (torch.jit.freeze), not FP16 --
-  # torch.jit.optimize_for_inference was evaluated but its output fails to
-  # reload in this environment's torch build (see src/export/README.md).
+    opset_version: 18
+
+artifacts:
+  checkpoint_dir: "artifacts/checkpoints"
+  checkpoint: "artifacts/checkpoints/best_model.pt"
+  evaluation_file: "artifacts/evaluation/test_metrics.json"
 
 tracking:
   mlflow:
     enabled: true
-    # NOTE: plain filesystem tracking (e.g. "artifacts/mlruns") is deprecated in
-    # MLflow 3.x; using a local SQLite backend instead, per MLflow's current guidance.
     tracking_uri: "sqlite:///artifacts/mlruns/mlflow.db"
+    artifact_location: "artifacts/mlruns"
     experiment_name: "brain_tumor_classification"
 
 logging:
-  level: "INFO"   # DEBUG | INFO | WARNING | ERROR
+  level: "INFO"

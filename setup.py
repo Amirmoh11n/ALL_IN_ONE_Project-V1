@@ -1,6 +1,4 @@
-"""
-setup.py (placeholder)
+"""Compatibility setup entry point for pip/setuptools installations."""
+from setuptools import setup
 
-Purpose: legacy/packaging entry point, kept alongside pyproject.toml per the
-approved folder structure. Content pending discussion/approval.
-"""
+setup()

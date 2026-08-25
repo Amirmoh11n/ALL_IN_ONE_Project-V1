@@ -1,49 +1,42 @@
-"""
-Loads and provides access to configs/config.yaml, the single source of truth
-for experiment settings (data paths, split ratios, image/augmentation settings,
-training hyperparameters, etc.) so experiments can be run without touching source code.
-"""
-
+"""Configuration loading and project-root-aware path resolution."""
 from pathlib import Path
 from typing import Any, Dict
-
 import yaml
 
 
 class ConfigLoader:
-    """Loads a YAML config file into a plain dict, with a dotted-path getter."""
+    """Loads YAML configuration and exposes dotted-path access."""
 
     def __init__(self, config_path: Path) -> None:
-        """
-        Args:
-            config_path: Path to a YAML config file (e.g. configs/config.yaml).
-        """
-        self.config_path = Path(config_path)
+        self.config_path = Path(config_path).expanduser().resolve()
+        self.project_root = self.config_path.parent.parent
         self._config: Dict[str, Any] = self._load()
 
     def _load(self) -> Dict[str, Any]:
-        """Read and parse the YAML file. Returns an empty dict for an empty file."""
-        with open(self.config_path, "r", encoding="utf-8") as f:
+        with self.config_path.open("r", encoding="utf-8") as f:
             return yaml.safe_load(f) or {}
 
     @property
     def raw(self) -> Dict[str, Any]:
-        """Return the full config as a plain dict."""
         return self._config
 
     def get(self, dotted_key: str, default: Any = None) -> Any:
-        """Fetch a nested config value using a dotted path.
-
-        Example:
-            config.get("data.split.val_ratio", 0.15)
-
-        Args:
-            dotted_key: Dot-separated path into the nested config dict.
-            default: Value returned if the path does not exist.
-        """
         node: Any = self._config
         for part in dotted_key.split("."):
             if not isinstance(node, dict) or part not in node:
                 return default
             node = node[part]
         return node
+
+    def resolve_path(self, dotted_key: str, default: str) -> Path:
+        """Resolve a config path relative to the project root."""
+        value = self.get(dotted_key, default)
+        path = Path(value).expanduser()
+        return path if path.is_absolute() else self.project_root / path
+
+    def save_snapshot(self, output_path: Path) -> None:
+        """Save the exact active configuration for experiment reproducibility."""
+        output_path = Path(output_path)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        with output_path.open("w", encoding="utf-8") as f:
+            yaml.safe_dump(self._config, f, sort_keys=False)

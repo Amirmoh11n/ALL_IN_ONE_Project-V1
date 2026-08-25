@@ -1,22 +1,15 @@
-"""
-Inference pipeline: loads a trained checkpoint and classifies a single MRI
-image, returning the predicted tumor class and per-class confidence scores.
-This is what the FastAPI backend (webapplication/backend) will call when a
-user uploads an image.
-"""
-
+"""Single-image inference pipeline for the trained classifier."""
 import logging
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Optional, Union
-
 import torch
 import torch.nn.functional as F
 from PIL import Image
 
 from src.data.augment import AugmentationFactory
 from src.data.classes import TumorClasses
-from src.models.efficientnet import EfficientNetB3Classifier
+from src.models.factory import build_model
 from src.utils.checkpoint import load_model_checkpoint
 from src.utils.config_loader import ConfigLoader
 
@@ -25,15 +18,11 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class PredictionResult:
-    """A single image's prediction: the winning class plus the full probability
-    distribution over all classes."""
-
     predicted_class: str
     confidence: float
     probabilities: Dict[str, float]
 
     def to_dict(self) -> Dict:
-        """Flat, JSON-friendly dict representation (e.g. for the FastAPI response)."""
         return {
             "predicted_class": self.predicted_class,
             "confidence": self.confidence,
@@ -42,68 +31,50 @@ class PredictionResult:
 
 
 class InferencePipeline:
-    """Loads a trained checkpoint once, then classifies MRI images on demand."""
+    """Load a checkpoint once and classify many uploaded MRI images."""
 
     def __init__(
-        self,
-        checkpoint_path: Path,
-        config: ConfigLoader,
+        self, checkpoint_path: Path, config: ConfigLoader,
         device: Optional[torch.device] = None,
     ) -> None:
-        """
-        Args:
-            checkpoint_path: Path to a checkpoint saved by Trainer
-                (e.g. artifacts/checkpoints/best_model.pt).
-            config: Loaded ConfigLoader over configs/config.yaml (reads
-                model.num_classes, data.image_size, data.normalization).
-            device: Device to run inference on. Defaults to CUDA if available, else CPU.
-        """
         self.config = config
-        self.device = device or torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        requested = str(config.get("training.device", "auto")).lower()
+        if device is not None:
+            self.device = device
+        else:
+            self.device = torch.device(
+                "cuda" if requested in {"auto", "cuda"} and torch.cuda.is_available() else "cpu"
+            )
+        model = build_model(config, pretrained=False)
+        self.model = load_model_checkpoint(model, Path(checkpoint_path), self.device)
 
-        num_classes = config.get("model.num_classes", TumorClasses.num_classes())
-        model = EfficientNetB3Classifier(num_classes=num_classes, pretrained=False)
-        self.model = load_model_checkpoint(model, checkpoint_path, device=self.device)
-
-        image_size = config.get("data.image_size", 300)
-        mean = config.get("data.normalization.mean")
-        std = config.get("data.normalization.std")
-        self.transform = AugmentationFactory.build_eval_transforms(image_size, mean, std)
-
-        logger.info("InferencePipeline ready (checkpoint=%s, device=%s).", checkpoint_path, self.device)
+        image_size = int(config.get("data.image_size", 300))
+        self.transform = AugmentationFactory.build_eval_transforms(
+            image_size, config.get("data.normalization.mean"), config.get("data.normalization.std")
+        )
+        self.class_names = config.get("data.class_names", TumorClasses.NAMES)
+        if len(self.class_names) != int(config.get("model.num_classes", len(self.class_names))):
+            raise ValueError("data.class_names and model.num_classes must match.")
 
     def predict(self, image: Union[str, Path, Image.Image]) -> PredictionResult:
-        """Classify a single image.
-
-        Args:
-            image: A file path/str, or an already-loaded PIL Image.
-
-        Returns:
-            A PredictionResult with the predicted class name, its confidence,
-            and the full per-class probability distribution.
-        """
         pil_image = self._to_pil_image(image)
-        input_tensor = self.transform(pil_image).unsqueeze(0).to(self.device)
-
+        tensor = self.transform(pil_image).unsqueeze(0).to(self.device)
         with torch.no_grad():
-            logits = self.model(input_tensor)
-            probabilities = F.softmax(logits, dim=1)[0]
-
-        predicted_index = int(probabilities.argmax().item())
+            probabilities = F.softmax(self.model(tensor), dim=1)[0]
+        index = int(probabilities.argmax().item())
         probability_dict = {
-            TumorClasses.index_to_name(i): float(probabilities[i].item())
-            for i in range(len(probabilities))
+            self.class_names[i]: float(probabilities[i].item())
+            for i in range(len(self.class_names))
         }
-
         return PredictionResult(
-            predicted_class=TumorClasses.index_to_name(predicted_index),
-            confidence=float(probabilities[predicted_index].item()),
+            predicted_class=self.class_names[index],
+            confidence=float(probabilities[index].item()),
             probabilities=probability_dict,
         )
 
     @staticmethod
     def _to_pil_image(image: Union[str, Path, Image.Image]) -> Image.Image:
-        """Normalize the input into an RGB PIL Image."""
         if isinstance(image, Image.Image):
             return image.convert("RGB")
-        return Image.open(image).convert("RGB")
+        with Image.open(image) as pil:
+            return pil.convert("RGB")

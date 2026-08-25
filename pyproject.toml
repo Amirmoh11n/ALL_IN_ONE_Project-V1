@@ -1,32 +1,27 @@
 [project]
 name = "brain-tumor-classification"
-version = "0.1.0"
-description = "End-to-end brain tumor MRI classification system (EfficientNet-B3 + FastAPI/React web app)."
+version = "1.0.0"
+description = "End-to-end brain tumor MRI classification with EfficientNet-B3, MLflow and validated exports."
 requires-python = ">=3.10"
 dependencies = [
-    # --- Step 1: data pipeline ---
     "torch>=2.2",
     "torchvision>=0.17",
     "pillow>=10.0",
     "pyyaml>=6.0",
     "kagglehub>=0.3",
-    # --- Step 3: training engine ---
     "mlflow>=3.0",
-    # --- Step 4: evaluation metrics ---
     "scikit-learn>=1.4",
     "numpy>=1.26",
-    # --- Step 6: model export ---
     "onnx>=1.16",
-    "onnxscript>=0.2",   # required by torch's current default ONNX exporter (dynamo=True)
-    "onnxruntime>=1.18", # used to validate exported ONNX models against the PyTorch output
-    # NOTE: dependencies for later steps (FastAPI, etc.) will be added
-    # incrementally, only when their step is implemented.
+    "onnxscript>=0.2",
+    "onnxruntime>=1.18",
 ]
 
 [project.optional-dependencies]
-dev = [
-    "pytest>=8.0",
-]
+dev = ["pytest>=8.0", "ruff>=0.6"]
+
+[project.scripts]
+brain-tumor = "src.cli:main"
 
 [build-system]
 requires = ["setuptools>=68.0"]

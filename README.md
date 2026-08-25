@@ -1,51 +1,247 @@
-# ALL_IN_ONE_Project-V1
+# Brain Tumor MRI Classification
 
-End-to-end system for classifying brain radiology (MRI) images into 4 tumor classes, using the
-Brain Tumor MRI Dataset (Masoud Nickparvar).
+End-to-end PyTorch project for classifying brain MRI images into four classes:
 
-Delivers, incrementally (MVP first):
-- A trained EfficientNet-B3 (PyTorch) model.
-- A web application (FastAPI backend + React frontend) for uploading an MRI image and receiving a
-  text prediction.
+- `glioma`
+- `meningioma`
+- `notumor`
+- `pituitary`
 
-Every folder has its own short `README.md` describing its purpose in more detail — see:
-`artifacts/`, `configs/`, `data/`, `docker/`, `scripts/`, `src/` (and its subpackages),
-`tests/`, `webapplication/` (and its subfolders).
+The project uses **EfficientNet-B3 + ImageNet transfer learning**, stratified train/validation splitting, class-weighted CrossEntropyLoss, Adam, ReduceLROnPlateau, early stopping, MLflow tracking, full test evaluation, single-image inference, and validated model exports.
 
-## Status
+## 1. Setup
 
-- ✅ **Step 1 — Data pipeline**: implemented and tested (`src/data/`). Downloads the
-  dataset via `kagglehub` if missing, performs a stratified train/val split (15% val),
-  builds `BrainTumorDataset`s with ImageNet normalization + on-the-fly augmentation
-  (train only), and exposes ready-to-use `DataLoader`s through `DataPipeline`.
-- ✅ **Step 2 — Model**: implemented and tested (`src/models/efficientnet.py`).
-  `EfficientNetB3Classifier` wraps torchvision's ImageNet-pretrained EfficientNet-B3
-  with a replaced 4-class output layer; built-in dropout preserved; `freeze_backbone`
-  is config-driven (default: full fine-tune).
-- ✅ **Step 3 — Training engine**: implemented and tested (`src/engine/trainer.py`).
-  `Trainer` runs the full loop (CrossEntropyLoss, optionally class-weighted via
-  runtime-computed weights, Adam, `ReduceLROnPlateau`, early stopping, best-checkpoint
-  saving, optional MLflow tracking).
-- ✅ **Step 4 — Metrics**: implemented and tested (`src/metrics/`). All 6 metrics
-  (Confusion Matrix, Recall, F1-macro, Precision, ROC-AUC macro/OvR, Accuracy) as
-  thin scikit-learn-backed classes with a consistent `.compute()` interface.
-- ✅ **Step 5 — Evaluation**: implemented and tested (`src/evaluate/evaluate.py`).
-  `ModelEvaluator` runs inference over a DataLoader (e.g. the untouched Testing
-  set) and computes the full metric suite via `EvaluationResult`. Checkpoint
-  loading (`src/utils/checkpoint.py`) is shared with the upcoming inference step.
-- ✅ **Step 6 — Export & Inference**: implemented and tested
-  (`src/export/export.py`, `src/inference/inference.py`). `ModelExporter`
-  produces Web (TorchScript), GPU (frozen TorchScript), Mobile (PyTorch Lite
-  Interpreter), and ONNX formats, each validated by reloading and comparing
-  output against the original model. `InferencePipeline` loads a checkpoint
-  and classifies a single uploaded image, returning class + confidence +
-  full probability distribution. See `src/export/README.md` for a few
-  deprecation/compatibility notes found while implementing.
-- ⏳ The web app (FastAPI backend + React frontend) and Docker/AWS deployment
-  are not yet implemented — pending step-by-step discussion and approval.
+This project is designed for **uv**.
 
-Run the data-pipeline tests:
 ```bash
-pip install -e .
-pytest tests/ -v
+git clone <YOUR_REPOSITORY_URL>
+cd ALL_IN_ONE_Project-V1
+
+chmod +x scripts/setup.bash scripts/run.bash
+./scripts/setup.bash
+```
+
+The setup script creates the virtual environment, installs all dependencies, and creates the artifact directories.
+
+If you do not have `uv`, install it using the official installer/documentation, then rerun the setup script.
+
+### Kaggle authentication
+
+The pipeline automatically downloads the dataset when `data/raw/Training` and `data/raw/Testing` are missing.
+
+Configure either:
+
+```bash
+mkdir -p ~/.kaggle
+cp /path/to/kaggle.json ~/.kaggle/kaggle.json
+chmod 600 ~/.kaggle/kaggle.json
+```
+
+or set:
+
+```bash
+export KAGGLE_USERNAME="your_username"
+export KAGGLE_KEY="your_key"
+```
+
+If the dataset is already present under `data/raw/`, no Kaggle credentials are needed.
+
+## 2. Run tests
+
+```bash
+uv run pytest tests -v
+```
+
+## 3. Train
+
+The complete pipeline is:
+
+`dataset -> stratified split -> augmentation -> DataLoader -> EfficientNet-B3 -> weighted CE -> Adam -> scheduler -> validation -> early stopping -> best checkpoint -> MLflow`
+
+Run:
+
+```bash
+uv run brain-tumor train
+```
+
+For a quick experiment:
+
+```bash
+uv run brain-tumor train --epochs 2
+```
+
+The best checkpoint is saved to:
+
+```text
+artifacts/checkpoints/best_model.pt
+```
+
+Training history is saved to:
+
+```text
+artifacts/checkpoints/history.json
+```
+
+## 4. MLflow
+
+Start the local MLflow UI:
+
+```bash
+./scripts/run.bash mlflow
+```
+
+Then open the address printed by MLflow in your browser.
+
+The experiment is configured in `configs/config.yaml`.
+
+## 5. Final evaluation
+
+Evaluation uses the untouched `Testing` directory.
+
+```bash
+uv run brain-tumor evaluate
+```
+
+Output:
+
+```text
+artifacts/evaluation/test_metrics.json
+```
+
+The report contains:
+
+- Accuracy
+- Macro Precision
+- Macro Recall / Sensitivity
+- Macro F1
+- Macro ROC-AUC OvR
+- Per-class Precision
+- Per-class Recall
+- Per-class F1
+- Confusion Matrix
+
+## 6. Export
+
+After a successful training run:
+
+```bash
+uv run brain-tumor export
+```
+
+The exporter produces and validates:
+
+```text
+artifacts/exports/
+├── brain_tumor_efficientnet_b3_web.pt
+├── brain_tumor_efficientnet_b3_gpu.pt
+├── brain_tumor_efficientnet_b3_mobile.ptl
+├── brain_tumor_efficientnet_b3.onnx
+└── brain_tumor_efficientnet_b3_manifest.json
+```
+
+### Web/Cloud
+
+TorchScript, loadable without the original Python model class.
+
+### GPU
+
+Frozen TorchScript for deployment-oriented inference.
+
+### Mobile
+
+PyTorch Lite Interpreter artifact. The exporter attempts mobile optimization and falls back to a plain traced module if the installed PyTorch build does not provide the required mobile optimization support.
+
+### ONNX
+
+ONNX is structurally checked with `onnx.checker`, executed with ONNX Runtime, compared against the PyTorch output, and tested with a dynamic batch size.
+
+## 7. Single-image inference
+
+```bash
+uv run brain-tumor predict --image /absolute/path/to/mri.jpg
+```
+
+Example response:
+
+```json
+{
+  "predicted_class": "glioma",
+  "confidence": 0.973,
+  "probabilities": {
+    "glioma": 0.973,
+    "meningioma": 0.012,
+    "notumor": 0.004,
+    "pituitary": 0.011
+  }
+}
+```
+
+## 8. Configuration
+
+All experiment settings live in:
+
+```text
+configs/config.yaml
+```
+
+Important sections:
+
+- `data`
+- `model`
+- `training`
+- `evaluation`
+- `export`
+- `artifacts`
+- `tracking.mlflow`
+- `logging`
+
+The source code does not hardcode training hyperparameters.
+
+## 9. Project lifecycle
+
+```text
+                    ┌─────────────────┐
+                    │ Kaggle / Local  │
+                    │ Brain MRI Data  │
+                    └────────┬────────┘
+                             │
+                    ┌────────▼────────┐
+                    │ Data Pipeline   │
+                    │ train/val/test  │
+                    └────────┬────────┘
+                             │
+                    ┌────────▼────────┐
+                    │ EfficientNet-B3 │
+                    │ Transfer Learn. │
+                    └────────┬────────┘
+                             │
+                    ┌────────▼────────┐
+                    │ Trainer         │
+                    │ CE + Adam       │
+                    │ Scheduler + AMP │
+                    └────────┬────────┘
+                             │
+              ┌──────────────▼──────────────┐
+              │ best_model.pt + MLflow run │
+              └──────────────┬──────────────┘
+                             │
+             ┌───────────────┼────────────────┐
+             ▼               ▼                ▼
+        Evaluation        Export           Inference
+        test_metrics      PT/PTL/ONNX      MRI -> JSON
+```
+
+## 10. Important medical-data note
+
+This is a machine-learning engineering/research project. Model predictions must not be treated as a medical diagnosis. The untouched test split is used for final evaluation, but the dataset itself does not provide patient identifiers, so the validation strategy is image-level stratification rather than patient-level splitting.
+
+## 11. Main commands
+
+```bash
+./scripts/run.bash train
+./scripts/run.bash evaluate
+./scripts/run.bash export
+./scripts/run.bash predict --image /path/to/image.jpg
+./scripts/run.bash test
+./scripts/run.bash mlflow
 ```

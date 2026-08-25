@@ -90,10 +90,15 @@ class DatasetDownloader:
 
     @classmethod
     def _folder_has_images(cls, folder: Path) -> bool:
-        """Return True if folder exists and contains at least one supported image file."""
-        if not folder.exists():
+        """Return True when the split contains all expected class folders with images."""
+        if not folder.is_dir():
             return False
-        return any(p.suffix.lower() in _IMAGE_SUFFIXES for p in folder.rglob("*"))
+        expected = {"glioma", "meningioma", "notumor", "pituitary"}
+        return all(
+            (folder / name).is_dir()
+            and any(p.is_file() and p.suffix.lower() in _IMAGE_SUFFIXES for p in (folder / name).rglob("*"))
+            for name in expected
+        )
 
     @staticmethod
     def _find_subfolder(root: Path, name: str) -> Optional[Path]:

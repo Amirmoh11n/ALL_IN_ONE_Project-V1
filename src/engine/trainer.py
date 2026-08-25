@@ -1,13 +1,5 @@
-"""
-Training loop orchestration for EfficientNet-B3: CrossEntropyLoss (optionally
-class-weighted, computed at runtime from the actual training split),
-Adam optimizer, ReduceLROnPlateau LR scheduling, early stopping on validation
-loss, best-checkpoint saving, per-epoch validation metrics (via src/metrics/),
-and optional MLflow experiment tracking.
-
-All hyperparameters are read from configs/config.yaml (never hardcoded).
-"""
-
+"""Production training engine for EfficientNet-B3 brain-tumor classification."""
+import json
 import logging
 from collections import Counter
 from contextlib import nullcontext
@@ -32,49 +24,30 @@ logger = logging.getLogger(__name__)
 
 
 def compute_class_weights(labels: List[int], num_classes: int) -> torch.Tensor:
-    """Compute inverse-frequency class weights from a list of integer labels.
-
-    Weight for class i = total_samples / (num_classes * count(class i)).
-    Classes with more samples get a smaller weight; classes with fewer
-    samples get a larger weight, so CrossEntropyLoss penalizes minority-class
-    mistakes more heavily.
-
-    Args:
-        labels: List of integer class labels (e.g. from the training split).
-        num_classes: Total number of classes.
-
-    Returns:
-        A float tensor of shape (num_classes,).
-    """
     counts = Counter(labels)
     total = len(labels)
-    weights = [
-        total / (num_classes * counts[i]) if counts.get(i, 0) > 0 else 0.0
-        for i in range(num_classes)
-    ]
-    return torch.tensor(weights, dtype=torch.float32)
+    if total == 0:
+        raise ValueError("Cannot compute class weights from an empty training set.")
+    return torch.tensor(
+        [total / (num_classes * counts[i]) if counts.get(i, 0) else 0.0 for i in range(num_classes)],
+        dtype=torch.float32,
+    )
 
 
 class EarlyStopping:
-    """Stops training when a monitored metric stops improving for `patience` epochs."""
-
-    def __init__(self, patience: int = 5, mode: str = "min") -> None:
-        """
-        Args:
-            patience: Number of epochs with no improvement before stopping.
-            mode: "min" if lower is better (e.g. loss), "max" if higher is better.
-        """
-        self.patience = patience
-        self.mode = mode
+    def __init__(self, patience: int = 5, mode: str = "min", min_delta: float = 0.0) -> None:
+        if patience < 1:
+            raise ValueError("patience must be >= 1")
+        if mode not in {"min", "max"}:
+            raise ValueError("mode must be 'min' or 'max'")
+        self.patience, self.mode, self.min_delta = patience, mode, min_delta
         self.best_score: Optional[float] = None
         self.counter = 0
         self.should_stop = False
 
     def step(self, current_score: float) -> None:
-        """Update internal state with the latest epoch's monitored score."""
         if self.best_score is None or self._is_improvement(current_score):
-            self.best_score = current_score
-            self.counter = 0
+            self.best_score, self.counter = current_score, 0
         else:
             self.counter += 1
             if self.counter >= self.patience:
@@ -82,173 +55,123 @@ class EarlyStopping:
 
     def _is_improvement(self, current_score: float) -> bool:
         if self.mode == "min":
-            return current_score < self.best_score
-        return current_score > self.best_score
+            return current_score < self.best_score - self.min_delta
+        return current_score > self.best_score + self.min_delta
 
 
 class Trainer:
-    """Orchestrates the EfficientNet-B3 training loop."""
+    """Train, validate, checkpoint and optionally track an experiment with MLflow."""
 
     def __init__(
-        self,
-        model: nn.Module,
-        train_loader: DataLoader,
-        val_loader: DataLoader,
-        config: ConfigLoader,
-        num_classes: Optional[int] = None,
-        checkpoint_dir: Optional[Path] = None,
+        self, model: nn.Module, train_loader: DataLoader, val_loader: DataLoader,
+        config: ConfigLoader, num_classes: Optional[int] = None, checkpoint_dir: Optional[Path] = None,
     ) -> None:
-        """
-        Args:
-            model: The (uncompiled) classifier, e.g. EfficientNetB3Classifier.
-            train_loader: Training DataLoader (from DataPipeline).
-            val_loader: Validation DataLoader (from DataPipeline).
-            config: Loaded ConfigLoader over configs/config.yaml.
-            num_classes: Number of classes, used to compute validation metrics
-                each epoch. Defaults to config's model.num_classes (falls back to 4).
-            checkpoint_dir: Where to save the best checkpoint. Defaults to
-                "artifacts/checkpoints" (the project's fixed artifacts location).
-        """
         self.model = model
-        self.train_loader = train_loader
-        self.val_loader = val_loader
-        self.config = config
-        self.num_classes = num_classes or config.get("model.num_classes", 4)
-
-        requested_device = config.get("training.device", "cuda")
-        self.device = torch.device(requested_device if torch.cuda.is_available() else "cpu")
+        self.train_loader, self.val_loader, self.config = train_loader, val_loader, config
+        self.num_classes = int(num_classes or config.get("model.num_classes", 4))
+        requested = str(config.get("training.device", "auto")).lower()
+        if requested == "auto":
+            requested = "cuda" if torch.cuda.is_available() else "cpu"
+        if requested.startswith("cuda") and not torch.cuda.is_available():
+            logger.warning("CUDA requested but unavailable; using CPU.")
+            requested = "cpu"
+        self.device = torch.device(requested)
         self.model.to(self.device)
 
-        class_weights = None
+        labels = [int(label) for _, label in self.train_loader.dataset.samples]
+        weight = None
         if config.get("training.use_class_weights", False):
-            class_weights = self._compute_class_weights_from_train_loader().to(self.device)
-        self.criterion = nn.CrossEntropyLoss(weight=class_weights)
+            weight = compute_class_weights(labels, self.num_classes).to(self.device)
+            logger.info("Class weights: %s", weight.detach().cpu().tolist())
+        self.criterion = nn.CrossEntropyLoss(weight=weight)
 
-        lr = config.get("training.learning_rate", 1e-4)
-        self.optimizer = Adam(self.model.parameters(), lr=lr)
-
+        self.optimizer = Adam(
+            (p for p in self.model.parameters() if p.requires_grad),
+            lr=float(config.get("training.learning_rate", 1e-4)),
+            weight_decay=float(config.get("training.weight_decay", 0.0)),
+        )
         self.scheduler = ReduceLROnPlateau(
-            self.optimizer,
-            mode="min",
-            factor=config.get("training.lr_scheduler.factor", 0.5),
-            patience=config.get("training.lr_scheduler.patience", 2),
+            self.optimizer, mode="min",
+            factor=float(config.get("training.lr_scheduler.factor", 0.5)),
+            patience=int(config.get("training.lr_scheduler.patience", 2)),
         )
-
         self.early_stopping = EarlyStopping(
-            patience=config.get("training.early_stopping.patience", 5),
+            patience=int(config.get("training.early_stopping.patience", 5)),
             mode="min",
+            min_delta=float(config.get("training.early_stopping.min_delta", 0.0)),
         )
-
-        self.checkpoint_dir = Path(checkpoint_dir or "artifacts/checkpoints")
+        self.checkpoint_dir = Path(checkpoint_dir or config.resolve_path("artifacts.checkpoint_dir", "artifacts/checkpoints"))
         self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
         self.best_val_loss = float("inf")
-
-        self.mlflow_enabled = config.get("tracking.mlflow.enabled", False)
-
-    def _compute_class_weights_from_train_loader(self) -> torch.Tensor:
-        """Derive class weights from the actual samples in train_loader.dataset."""
-        labels = [label for _, label in self.train_loader.dataset.samples]
-        num_classes = len(set(labels))
-        weights = compute_class_weights(labels, num_classes)
-        logger.info("Computed class weights from training split: %s", weights.tolist())
-        return weights
+        self.mlflow_enabled = bool(config.get("tracking.mlflow.enabled", False))
+        self.use_amp = bool(config.get("training.amp", self.device.type == "cuda")) and self.device.type == "cuda"
+        self.scaler = torch.cuda.amp.GradScaler(enabled=self.use_amp)
 
     def fit(self, num_epochs: Optional[int] = None) -> Dict[str, List[float]]:
-        """Run the full training loop with early stopping.
-
-        Args:
-            num_epochs: Max epochs to run. Defaults to config's training.epochs.
-
-        Returns:
-            History dict with one list per epoch for: "train_loss", "val_loss",
-            "val_accuracy", "val_recall_macro", "val_precision_macro",
-            "val_f1_macro", "val_roc_auc_macro".
-        """
-        num_epochs = num_epochs or self.config.get("training.epochs", 30)
+        epochs = int(num_epochs or self.config.get("training.epochs", 30))
         history: Dict[str, List[float]] = {"train_loss": [], "val_loss": []}
-
-        run_context = self._mlflow_run_context()
-        with run_context:
-            self._log_mlflow_params(num_epochs)
-            for epoch in range(1, num_epochs + 1):
+        with self._mlflow_run_context():
+            self._log_mlflow_params(epochs)
+            for epoch in range(1, epochs + 1):
                 train_loss = self._train_one_epoch()
                 val_loss, y_true, y_pred, y_score = self._validate_one_epoch()
-                val_metrics = self._compute_validation_metrics(y_true, y_pred, y_score)
+                metrics = self._compute_validation_metrics(y_true, y_pred, y_score)
                 self.scheduler.step(val_loss)
-
                 history["train_loss"].append(train_loss)
                 history["val_loss"].append(val_loss)
-                for key, value in val_metrics.items():
+                for key, value in metrics.items():
                     history.setdefault(key, []).append(value)
-
                 logger.info(
-                    "Epoch %d/%d - train_loss=%.4f val_loss=%.4f val_acc=%.4f "
-                    "val_recall=%.4f val_precision=%.4f val_f1=%.4f val_roc_auc=%.4f",
-                    epoch, num_epochs, train_loss, val_loss,
-                    val_metrics["val_accuracy"], val_metrics["val_recall_macro"],
-                    val_metrics["val_precision_macro"], val_metrics["val_f1_macro"],
-                    val_metrics["val_roc_auc_macro"],
+                    "Epoch %d/%d | train_loss=%.4f val_loss=%.4f val_acc=%.4f val_f1=%.4f lr=%.3g",
+                    epoch, epochs, train_loss, val_loss, metrics["val_accuracy"],
+                    metrics["val_f1_macro"], self.optimizer.param_groups[0]["lr"],
                 )
-                self._log_mlflow_metrics(epoch, train_loss, val_loss, val_metrics)
-
+                self._log_mlflow_metrics(epoch, train_loss, val_loss, metrics)
                 if val_loss < self.best_val_loss:
                     self.best_val_loss = val_loss
-                    self._save_checkpoint(epoch, val_loss)
-
+                    self._save_checkpoint(epoch, val_loss, metrics)
                 self.early_stopping.step(val_loss)
                 if self.early_stopping.should_stop:
                     logger.info("Early stopping triggered at epoch %d.", epoch)
                     break
 
+        history_path = self.checkpoint_dir / "history.json"
+        history_path.write_text(json.dumps(history, indent=2), encoding="utf-8")
         return history
 
     def _train_one_epoch(self) -> float:
-        """Run one training epoch. Returns the mean training loss."""
         self.model.train()
-        running_loss = 0.0
+        running = 0.0
         for images, labels in self.train_loader:
-            images, labels = images.to(self.device), labels.to(self.device)
-            self.optimizer.zero_grad()
-            outputs = self.model(images)
-            loss = self.criterion(outputs, labels)
-            loss.backward()
-            self.optimizer.step()
-            running_loss += loss.item() * images.size(0)
-        return running_loss / len(self.train_loader.dataset)
+            images, labels = images.to(self.device, non_blocking=True), labels.to(self.device, non_blocking=True)
+            self.optimizer.zero_grad(set_to_none=True)
+            with torch.cuda.amp.autocast(enabled=self.use_amp):
+                loss = self.criterion(self.model(images), labels)
+            if self.use_amp:
+                self.scaler.scale(loss).backward()
+                self.scaler.step(self.optimizer)
+                self.scaler.update()
+            else:
+                loss.backward()
+                self.optimizer.step()
+            running += loss.item() * images.size(0)
+        return running / len(self.train_loader.dataset)
 
     def _validate_one_epoch(self) -> Tuple[float, List[int], List[int], List[List[float]]]:
-        """Run one validation epoch in a single pass.
-
-        Returns:
-            (mean val loss, true labels, predicted labels, predicted probabilities)
-            -- the latter three are used to compute the full metric suite
-            without a second forward pass over the validation set.
-        """
         self.model.eval()
-        running_loss = 0.0
-        y_true: List[int] = []
-        y_pred: List[int] = []
-        y_score: List[List[float]] = []
-
+        running, y_true, y_pred, y_score = 0.0, [], [], []
         with torch.no_grad():
             for images, labels in self.val_loader:
-                images, labels = images.to(self.device), labels.to(self.device)
+                images, labels = images.to(self.device, non_blocking=True), labels.to(self.device, non_blocking=True)
                 outputs = self.model(images)
-                loss = self.criterion(outputs, labels)
-                running_loss += loss.item() * images.size(0)
-
-                probabilities = TF.softmax(outputs, dim=1)
+                running += self.criterion(outputs, labels).item() * images.size(0)
+                probs = TF.softmax(outputs, dim=1)
                 y_true.extend(labels.cpu().tolist())
-                y_pred.extend(probabilities.argmax(dim=1).cpu().tolist())
-                y_score.extend(probabilities.cpu().tolist())
+                y_pred.extend(probs.argmax(1).cpu().tolist())
+                y_score.extend(probs.cpu().tolist())
+        return running / len(self.val_loader.dataset), y_true, y_pred, y_score
 
-        val_loss = running_loss / len(self.val_loader.dataset)
-        return val_loss, y_true, y_pred, y_score
-
-    def _compute_validation_metrics(
-        self, y_true: List[int], y_pred: List[int], y_score: List[List[float]],
-    ) -> Dict[str, float]:
-        """Compute the macro-averaged metric suite for one epoch's validation pass."""
+    def _compute_validation_metrics(self, y_true, y_pred, y_score):
         return {
             "val_accuracy": AccuracyMetric.compute(y_true, y_pred),
             "val_recall_macro": RecallMetric.compute(y_true, y_pred, average="macro"),
@@ -257,45 +180,42 @@ class Trainer:
             "val_roc_auc_macro": ROCAUCMetric.compute(y_true, y_score, num_classes=self.num_classes),
         }
 
-    def _save_checkpoint(self, epoch: int, val_loss: float) -> Path:
-        """Save the current model state as the new best checkpoint."""
-        checkpoint_path = self.checkpoint_dir / "best_model.pt"
-        torch.save(
-            {"epoch": epoch, "model_state_dict": self.model.state_dict(), "val_loss": val_loss},
-            checkpoint_path,
-        )
-        logger.info("Saved new best checkpoint (val_loss=%.4f) to %s", val_loss, checkpoint_path)
-        return checkpoint_path
+    def _save_checkpoint(self, epoch: int, val_loss: float, metrics: Dict[str, float]) -> Path:
+        path = self.checkpoint_dir / "best_model.pt"
+        torch.save({
+            "epoch": epoch, "model_state_dict": self.model.state_dict(),
+            "optimizer_state_dict": self.optimizer.state_dict(),
+            "scheduler_state_dict": self.scheduler.state_dict(),
+            "val_loss": val_loss, "val_metrics": metrics,
+            "class_names": self.config.get("data.class_names"),
+            "num_classes": self.num_classes,
+            "image_size": self.config.get("data.image_size"),
+        }, path)
+        logger.info("Saved best checkpoint -> %s", path)
+        return path
 
     def _mlflow_run_context(self):
-        """Return an MLflow run context manager if enabled, else a no-op context."""
         if not self.mlflow_enabled:
             return nullcontext()
         import mlflow
-
-        mlflow.set_tracking_uri(self.config.get("tracking.mlflow.tracking_uri", "artifacts/mlruns"))
+        uri = self.config.get("tracking.mlflow.tracking_uri", "sqlite:///artifacts/mlruns/mlflow.db")
+        Path(self.config.resolve_path("tracking.mlflow.artifact_location", "artifacts/mlruns")).mkdir(parents=True, exist_ok=True)
+        mlflow.set_tracking_uri(uri)
         mlflow.set_experiment(self.config.get("tracking.mlflow.experiment_name", "brain_tumor_classification"))
         return mlflow.start_run()
 
-    def _log_mlflow_params(self, num_epochs: int) -> None:
+    def _log_mlflow_params(self, epochs: int) -> None:
         if not self.mlflow_enabled:
             return
         import mlflow
-
         mlflow.log_params({
             "learning_rate": self.config.get("training.learning_rate", 1e-4),
-            "num_epochs": num_epochs,
-            "batch_size": self.train_loader.batch_size,
-            "use_class_weights": self.config.get("training.use_class_weights", False),
-            "device": str(self.device),
+            "epochs": epochs, "batch_size": self.train_loader.batch_size,
+            "num_classes": self.num_classes, "device": str(self.device),
+            "architecture": self.config.get("model.architecture", "efficientnet_b3"),
         })
 
-    def _log_mlflow_metrics(
-        self, epoch: int, train_loss: float, val_loss: float, val_metrics: Dict[str, float],
-    ) -> None:
-        if not self.mlflow_enabled:
-            return
-        import mlflow
-
-        metrics_to_log = {"train_loss": train_loss, "val_loss": val_loss, **val_metrics}
-        mlflow.log_metrics(metrics_to_log, step=epoch)
+    def _log_mlflow_metrics(self, epoch: int, train_loss: float, val_loss: float, metrics: Dict[str, float]) -> None:
+        if self.mlflow_enabled:
+            import mlflow
+            mlflow.log_metrics({"train_loss": train_loss, "val_loss": val_loss, **metrics}, step=epoch)
