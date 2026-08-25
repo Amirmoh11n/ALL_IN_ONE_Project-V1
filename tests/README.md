@@ -6,29 +6,32 @@ don't need the real dataset or network access.
 
 ```
 tests/
-├── conftest.py            # shared fixtures (synthetic Training/Testing folders),
-│                           # applies to every subfolder below automatically
-├── data/                   -> mirrors src/data/
+├── conftest.py              # shared fixtures (synthetic Training/Testing folders),
+│                             # applies to every subfolder below automatically
+├── data/                     -> mirrors src/data/
 │   ├── test_classes.py
 │   ├── test_downloader.py
+│   ├── test_acquisition.py   # DatasetAcquisition (presence checks + skip-download path)
 │   ├── test_splitter.py
+│   ├── test_augment.py       # AugmentationFactory (train vs eval pipelines)
 │   ├── test_dataset.py
-│   └── test_pipeline.py    # end-to-end DataPipeline test
-├── models/                 -> mirrors src/models/
+│   └── test_pipeline.py      # end-to-end DataPipeline test
+├── models/                   -> mirrors src/models/
 │   └── test_efficientnet.py
-├── engine/                 -> mirrors src/engine/
+├── engine/                   -> mirrors src/engine/
 │   └── test_trainer.py
-├── metrics/                -> mirrors src/metrics/
-│   └── test_metrics.py     # all 6 metrics, hand-computed expected values
-├── evaluate/                -> mirrors src/evaluate/
+├── metrics/                  -> mirrors src/metrics/
+│   └── test_metrics.py       # all 6 metrics, hand-computed expected values
+├── evaluate/                 -> mirrors src/evaluate/
 │   └── test_evaluate.py
-├── export/                 -> mirrors src/export/
+├── export/                   -> mirrors src/export/
 │   └── test_export.py
-├── inference/               -> mirrors src/inference/
+├── inference/                -> mirrors src/inference/
 │   └── test_inference.py
-└── utils/                  -> mirrors src/utils/
+└── utils/                    -> mirrors src/utils/
     ├── test_config_loader.py
-    └── test_checkpoint.py
+    ├── test_checkpoint.py
+    └── test_logging_setup.py # configure_logging level handling
 ```
 
 Run everything:
@@ -40,4 +43,5 @@ Run just one package's tests:
 ```bash
 pytest tests/data/ -v
 pytest tests/engine/ -v
+pytest tests/utils/ -v
 ```
