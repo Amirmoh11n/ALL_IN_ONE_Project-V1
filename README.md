@@ -735,7 +735,7 @@ Potential future improvements:
 
 # 📜 License
 
-This project is released under the **MIT License**.
+This project is released under the ** Apache License 2.0 License**.
 
 See [`LICENSE`](LICENSE) for details.
 
@@ -745,7 +745,7 @@ See [`LICENSE`](LICENSE) for details.
 
 **Amirmohammad Nashalji**
 
-Computer Engineering Student | Machine Learning & AI Enthusiast
+Computer Engineering Student | Machine Learning & AI Engineer
 
 ---
 
