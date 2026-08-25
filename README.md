@@ -20,7 +20,7 @@
 ![ONNX](https://img.shields.io/badge/ONNX-Runtime-005CED?logo=onnx\&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FastAPI-Backend-009688?logo=fastapi\&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-Deployment-2496ED?logo=docker\&logoColor=white)
-![License](https://img.shields.io/badge/Apache-License-2.0-License-green.svg)
+![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)
 
 </p>
 
@@ -735,9 +735,11 @@ Potential future improvements:
 
 # 📜 License
 
-This project is released under the ** Apache License 2.0 License**.
+This project is licensed under the **Apache License 2.0**.
 
-See [`LICENSE`](LICENSE) for details.
+You may use, modify, distribute, and use this project for commercial purposes under the terms and conditions of the license.
+
+See [`LICENSE`](LICENSE) for the full license text.
 
 ---
 
