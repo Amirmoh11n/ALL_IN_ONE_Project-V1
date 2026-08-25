@@ -245,3 +245,26 @@ This is a machine-learning engineering/research project. Model predictions must 
 ./scripts/run.bash test
 ./scripts/run.bash mlflow
 ```
+
+## Web Application
+
+The project includes a production-oriented web inference application:
+
+- Frontend: HTML + Tailwind CSS + JavaScript
+- Backend: FastAPI + ONNX Runtime
+- Model execution: server-side only; the browser never receives the ONNX model
+- Upload: PNG/JPG/JPEG/WEBP/BMP, max 10 MB by default
+- Health/readiness endpoints for cloud load balancers
+- Docker support
+- AWS ECS Express Mode / Fargate deployment support
+- Optional private S3 model loading through `MODEL_S3_URI`
+
+After training and export:
+
+```bash
+./start_webapp.bash
+```
+
+The launcher starts FastAPI and opens the browser at `http://127.0.0.1:8000`.
+
+For cloud deployment, see `aws/README.md`.

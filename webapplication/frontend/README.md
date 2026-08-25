@@ -1,7 +1,3 @@
-# frontend
+# Frontend
 
-React frontend for the Brain Tumor Classification web app.
-
-Purpose: lets a user upload an MRI image and displays the predicted class returned by the backend.
-
-Status: placeholder — not yet implemented (deferred to a later version, per project MVP scope).
+A zero-build, responsive HTML/Tailwind/vanilla-JS interface served by FastAPI. It supports drag-and-drop MRI uploads, preview, inference, confidence visualization, class probabilities, model status, and research-use warnings.

@@ -10,3 +10,8 @@ onnx>=1.16
 onnxscript>=0.2
 onnxruntime>=1.18
 pytest>=8.0
+fastapi>=0.115
+uvicorn[standard]>=0.30
+python-multipart>=0.0.9
+
+boto3>=1.34
