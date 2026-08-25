@@ -220,7 +220,7 @@ This project uses **[uv](https://docs.astral.sh/uv/)** for environment and depen
 ### 1. Clone
 
 ```bash
-git clone <YOUR_REPOSITORY_URL>
+git clone https://github.com/Amirmoh11n/ALL_IN_ONE_Project-V1/
 cd ALL_IN_ONE_Project-V1
 ```
 
