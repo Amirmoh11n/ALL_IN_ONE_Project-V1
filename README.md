@@ -20,7 +20,7 @@
 ![ONNX](https://img.shields.io/badge/ONNX-Runtime-005CED?logo=onnx\&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FastAPI-Backend-009688?logo=fastapi\&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-Deployment-2496ED?logo=docker\&logoColor=white)
-![License](https://img.shields.io/badge/License-MIT-green.svg)
+![License](https://img.shields.io/badge/Apache-License-2.0-License-green.svg)
 
 </p>
 
