@@ -1,5 +1,5 @@
 # Brain Tumor MRI Classification
-<img width="1254" height="1254" alt="logo2" src="https://github.com/user-attachments/assets/6bbca955-31f5-4bc4-a498-7200270f5325" />
+<img width="300" height="300" alt="logo2" src="https://github.com/user-attachments/assets/6bbca955-31f5-4bc4-a498-7200270f5325" />
 
 End-to-end PyTorch project for classifying brain MRI images into four classes:
 
