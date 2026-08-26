@@ -1,4 +1,3 @@
-<img width="1080" height="608" alt="All_In_One" src="https://github.com/user-attachments/assets/fb3a8f4f-ccf4-44cf-bdd3-4345763baaf8" />
 # 🧠 Brain Tumor MRI Classification
 
 <p align="center">
