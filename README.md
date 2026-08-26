@@ -1,7 +1,7 @@
 # 🧠 Brain Tumor MRI Classification
 
 <p align="center">
-  <img width="140" height="300" alt="logo" src="https://github.com/user-attachments/assets/b20eea47-9411-461f-ab31-53d984bd9b41" ,alt="Brain Tumor MRI Classification Logo"/>
+  <img width="300" height="300" alt="logo" src="https://github.com/user-attachments/assets/b20eea47-9411-461f-ab31-53d984bd9b41" ,alt="Brain Tumor MRI Classification Logo"/>
 </p>
 
 <p align="center">
