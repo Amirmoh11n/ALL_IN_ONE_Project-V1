@@ -26,6 +26,10 @@
 
 ---
 
+## Video output
+
+<img width="1080" height="608" alt="All_In_One" src="https://github.com/user-attachments/assets/821f776d-f2ff-48e5-9f1a-d88571a604c6" , alt = "Output video" />
+
 ## Overview
 
 **Brain Tumor MRI Classification** is an end-to-end deep learning system designed to classify brain MRI images into four categories:
