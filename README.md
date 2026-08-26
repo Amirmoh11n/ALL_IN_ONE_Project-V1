@@ -26,7 +26,7 @@
 
 ---
 
-## Video output
+## Web Application 
 
 <img width="1080" height="608" alt="All_In_One" src="https://github.com/user-attachments/assets/39a76e3a-3cdb-4cac-8418-44acaa8a19e5" />
 
