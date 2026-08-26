@@ -3,24 +3,11 @@
 Only the "dataset already present -> skip download" and population-check paths
 are exercised here. The real kagglehub download path requires network access
 and credentials, which are out of scope for unit tests.
-
-NOTE: src/data/acquisition.py currently imports CLASS_NAMES from
-src.data.classes, but that name does not exist (only TumorClasses.NAMES does).
-Until that source bug is fixed, these tests are skipped automatically.
 """
 
 from pathlib import Path
 
 import pytest
-
-pytest.importorskip(
-    "src.data.acquisition",
-    reason=(
-        "src.data.acquisition imports CLASS_NAMES which is missing from "
-        "src.data.classes (use TumorClasses.NAMES). Fix the source import "
-        "before enabling these tests."
-    ),
-)
 
 from src.data.acquisition import DatasetAcquisition, DatasetNotAvailableError
 from src.data.classes import TumorClasses

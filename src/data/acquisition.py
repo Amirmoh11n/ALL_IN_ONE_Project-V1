@@ -19,7 +19,7 @@ import shutil
 from pathlib import Path
 from typing import List
 
-from src.data.classes import CLASS_NAMES
+from src.data.classes import TumorClasses
 
 logger = logging.getLogger(__name__)
 
@@ -91,7 +91,7 @@ class DatasetAcquisition:
         expected class subfolder contains at least one image file."""
         if not split_dir.is_dir():
             return False
-        for class_name in CLASS_NAMES:
+        for class_name in TumorClasses.NAMES:
             class_dir = split_dir / class_name
             if not class_dir.is_dir():
                 return False

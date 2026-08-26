@@ -105,7 +105,7 @@ class Trainer:
         self.best_val_loss = float("inf")
         self.mlflow_enabled = bool(config.get("tracking.mlflow.enabled", False))
         self.use_amp = bool(config.get("training.amp", self.device.type == "cuda")) and self.device.type == "cuda"
-        self.scaler = torch.cuda.amp.GradScaler(enabled=self.use_amp)
+        self.scaler = torch.amp.GradScaler("cuda", enabled=self.use_amp)
 
     def fit(self, num_epochs: Optional[int] = None) -> Dict[str, List[float]]:
         epochs = int(num_epochs or self.config.get("training.epochs", 30))
@@ -145,7 +145,7 @@ class Trainer:
         for images, labels in self.train_loader:
             images, labels = images.to(self.device, non_blocking=True), labels.to(self.device, non_blocking=True)
             self.optimizer.zero_grad(set_to_none=True)
-            with torch.cuda.amp.autocast(enabled=self.use_amp):
+            with torch.amp.autocast("cuda", enabled=self.use_amp):
                 loss = self.criterion(self.model(images), labels)
             if self.use_amp:
                 self.scaler.scale(loss).backward()
