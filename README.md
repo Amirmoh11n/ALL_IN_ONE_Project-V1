@@ -69,6 +69,27 @@ Web Application / Cloud Deployment
 
 ---
 
+## ✅ Status
+
+| Component              | Status                                      |
+|------------------------|---------------------------------------------|
+| Data pipeline          | Implemented & tested                        |
+| EfficientNet-B3 model  | Implemented & tested                        |
+| Trainer (AMP, ES, LR)  | Implemented & tested                        |
+| Metrics & evaluation   | Implemented & tested                        |
+| Export (TS / Lite / ONNX) | Implemented & tested                     |
+| Inference pipeline     | Implemented & tested                        |
+| FastAPI + web UI       | Implemented & tested                        |
+| Unit / integration tests | **85 tests – all passing**                |
+
+**Recent fixes (2026-08):**
+- Fixed missing `CLASS_NAMES` import in `src/data/acquisition.py` (now uses `TumorClasses.NAMES`).
+- Updated AMP APIs in `src/engine/trainer.py` to the non-deprecated `torch.amp` forms.
+- Corrected project structure documentation to match the actual layout (`src/*`, `webapplication/`).
+- Full test suite verified green.
+
+---
+
 ## ✨ Key Features
 
 * 🧠 **EfficientNet-B3** with ImageNet transfer learning
@@ -166,10 +187,10 @@ Web Application / Cloud Deployment
 ```text
 .
 ├── configs/
-│   └── config.yaml
+│   └── config.yaml                  # Single source of truth for all hyperparameters
 │
 ├── data/
-│   └── raw/
+│   └── raw/                         # Dataset (auto-downloaded via kagglehub if missing)
 │       ├── Training/
 │       └── Testing/
 │
@@ -177,33 +198,37 @@ Web Application / Cloud Deployment
 │   ├── checkpoints/
 │   │   ├── best_model.pt
 │   │   └── history.json
-│   │
 │   ├── evaluation/
 │   │   └── test_metrics.json
-│   │
-│   └── exports/
-│       ├── brain_tumor_efficientnet_b3_web.pt
-│       ├── brain_tumor_efficientnet_b3_gpu.pt
-│       ├── brain_tumor_efficientnet_b3_mobile.ptl
-│       ├── brain_tumor_efficientnet_b3.onnx
-│       └── brain_tumor_efficientnet_b3_manifest.json
+│   ├── exports/
+│   │   ├── *_web.pt                 # TorchScript (web)
+│   │   ├── *_gpu.pt                 # Frozen TorchScript
+│   │   ├── *_mobile.ptl             # PyTorch Lite
+│   │   └── *.onnx                   # ONNX
+│   └── mlruns/                      # MLflow tracking
 │
 ├── src/
-│   └── brain_tumor/
+│   ├── cli.py                       # Entry point: train / evaluate / export / predict
+│   ├── data/                        # Acquisition, split, augment, Dataset, DataPipeline
+│   ├── models/                      # EfficientNet-B3 classifier + factory
+│   ├── engine/                      # Trainer (AMP, early stopping, LR scheduler, MLflow)
+│   ├── metrics/                     # Accuracy, Precision, Recall, F1, ROC-AUC, Confusion Matrix
+│   ├── evaluate/                    # Independent test-set evaluation
+│   ├── export/                      # TorchScript / Lite / ONNX exporters with validation
+│   ├── inference/                   # Single-image InferencePipeline
+│   └── utils/                       # ConfigLoader, checkpoint, logging
 │
-├── tests/
+├── tests/                           # Full unit + integration suite (85 tests)
+│   ├── data/  engine/  evaluate/  export/
+│   ├── inference/  metrics/  models/  utils/  web/
 │
+├── webapplication/
+│   ├── backend/                     # FastAPI + ONNX Runtime service
+│   └── frontend/                    # Simple browser UI
+│
+├── docker/                          # Dockerfile(s)
+├── aws/                             # ECS / Fargate notes
 ├── scripts/
-│   ├── setup.bash
-│   └── run.bash
-│
-├── webapp/
-│   ├── frontend/
-│   └── backend/
-│
-├── aws/
-│   └── README.md
-│
 ├── start_webapp.bash
 ├── pyproject.toml
 ├── uv.lock
@@ -290,7 +315,9 @@ Run the complete test suite:
 uv run pytest tests -v
 ```
 
-The tests cover core project functionality and help prevent regressions across the training, evaluation, export, and inference pipeline.
+The suite currently contains **85 tests** covering data pipeline, model, trainer (including AMP / early-stopping / class weights / MLflow), metrics, evaluation, export (TorchScript, Lite, ONNX with validation), inference, and the FastAPI backend.
+
+All tests pass on the current codebase.
 
 ---
 
