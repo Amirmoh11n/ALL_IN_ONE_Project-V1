@@ -1,3 +1,14 @@
+---
+title: Brain Tumor MRI Classifier
+emoji: 🧠
+colorFrom: indigo
+colorTo: cyan
+sdk: docker
+app_port: 7860
+pinned: false
+license: apache-2.0
+---
+
 # 🧠 Brain Tumor MRI Classification
 
 <p align="center">
