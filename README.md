@@ -111,7 +111,7 @@ Web Application / Cloud Deployment
 * 🌐 FastAPI inference backend
 * 💻 Browser-based web interface
 * 🐳 Docker support
-* ☁️ AWS ECS / Fargate deployment support
+* ☁️ AWS ECS / Fargate deployment support(Not implement)
 * 🔐 Optional private S3 model loading
 * 🧪 Automated test suite
 * ⚙️ Centralized YAML configuration
@@ -232,7 +232,7 @@ Web Application / Cloud Deployment
 │   └── frontend/                    # Simple browser UI
 │
 ├── docker/                          # Dockerfile(s)
-├── aws/                             # ECS / Fargate notes
+├── aws/                             # Not Implement
 ├── scripts/
 ├── start_webapp.bash
 ├── pyproject.toml
